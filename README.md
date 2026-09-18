@@ -11,3 +11,8 @@ Switch all pages to Dark Mode.
 ## export scoreboard script
 
 Export the scoreboard at the specified elapsed time.
+
+
+## resolver
+
+resolve only on web browser.
