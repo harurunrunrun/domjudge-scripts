@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         DOMjudge ICPC-style Browser Resolver
 // @namespace    https://www.domjudge.org/
-// @version      3.6.0
+// @version      3.10.0
 // @description  Browser-only DOMjudge resolver with ICPC Tools Resolver-style stepping, award flow, and final free scrolling on jury pages.
 // @author       OpenAI
-// @match        
+// @match        https://www.domjudge.org/demoweb/jury*
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
@@ -159,16 +159,22 @@
     #${APP_ID} .djr-header-name { left:var(--name-left,130px); font-style:normal; justify-content:flex-start; }
     #${APP_ID} .djr-header-solved { left:var(--header-solved-left,1080px); width:var(--header-solved-w,70px); justify-content:flex-start; text-align:left; }
     #${APP_ID} .djr-header-time { left:var(--header-time-left,1180px); width:var(--header-time-w,80px); justify-content:flex-start; text-align:left; font-style:normal; }
+    #${APP_ID} .djr-rows {
+      position:absolute; inset:0; overflow:visible; will-change:transform; transform:translate3d(0,0,0);
+    }
     #${APP_ID} .djr-row {
       position:absolute; left:0; right:0; height:var(--row-h,72px); top:var(--header-px,22px);
       color:#fff; transform:translate3d(0,var(--y,0px),0);
       overflow:hidden; will-change:transform; font-weight:700;
     }
-    #${APP_ID} .djr-row.even::before { content:""; position:absolute; inset:0; background:${COLORS.stripe}; z-index:-2; }
-    #${APP_ID} .djr-row.selected::after, #${APP_ID} .djr-row.highlight::after { content:""; position:absolute; inset:0; background:${COLORS.selection}; z-index:-1; }
-    #${APP_ID} .djr-row.fts::after, #${APP_ID} .djr-row.fts-highlight::after { content:""; position:absolute; inset:0; background:${COLORS.fts}; z-index:-1; }
-    #${APP_ID} .djr-row.team-list::after { content:""; position:absolute; inset:0; background:${COLORS.teamList}; z-index:-1; }
-    #${APP_ID} .djr-row.highlight::before, #${APP_ID} .djr-row.fts-highlight::before { content:""; position:absolute; inset:0; border:1px solid #fff; z-index:20; pointer-events:none; }
+    /* Keep the alternating row background and award highlight on different paint layers.
+       v3.7 reused ::before for both; on odd-numbered ranks the stripe background inherited
+       the highlight z-index and covered all row contents. Element backgrounds avoid that. */
+    #${APP_ID} .djr-row.djr-even { background:${COLORS.stripe}; }
+    #${APP_ID} .djr-row.djr-selected, #${APP_ID} .djr-row.djr-highlight { background:${COLORS.selection}; }
+    #${APP_ID} .djr-row.djr-fts, #${APP_ID} .djr-row.djr-fts-highlight { background:${COLORS.fts}; }
+    #${APP_ID} .djr-row.djr-team-list { background:${COLORS.teamList}; }
+    #${APP_ID} .djr-row.djr-highlight, #${APP_ID} .djr-row.djr-fts-highlight { outline:1px solid #fff; outline-offset:-1px; }
     #${APP_ID} .djr-rank {
       position:absolute; left:var(--rank-left,8px); top:5px; width:var(--rank-w,70px); text-align:center;
       font-size:var(--row-font,34px); font-style:italic; line-height:1;
@@ -191,16 +197,16 @@
       font-size:var(--status-font,18px); font-weight:700; overflow:visible;
       box-shadow:inset 0 1px rgba(255,255,255,.14), inset 0 -1px rgba(0,0,0,.55);
     }
-    #${APP_ID} .djr-problem.pending { background:${COLORS.pending}; color:#fff; }
-    #${APP_ID} .djr-problem.solved { background:${COLORS.solved}; color:#fff; }
-    #${APP_ID} .djr-problem.fts { background:${COLORS.ftsCell}; color:#fff; outline:2px solid rgb(0,230,0); outline-offset:-1px; }
-    #${APP_ID} .djr-problem.failed { background:${COLORS.failed}; color:#fff; }
-    #${APP_ID} .djr-problem.focus { animation:djr-pending-focus .571s steps(1,end) infinite; }
+    #${APP_ID} .djr-problem.djr-cell-pending { background:${COLORS.pending}; color:#fff; }
+    #${APP_ID} .djr-problem.djr-cell-solved { background:${COLORS.solved}; color:#fff; }
+    #${APP_ID} .djr-problem.djr-fts { background:${COLORS.ftsCell}; color:#fff; outline:2px solid rgb(0,230,0); outline-offset:-1px; }
+    #${APP_ID} .djr-problem.djr-cell-failed { background:${COLORS.failed}; color:#fff; }
+    #${APP_ID} .djr-problem.djr-focus { animation:djr-pending-focus .571s steps(1,end) infinite; }
     @keyframes djr-pending-focus {
       0%,59% { box-shadow:0 0 0 3px #ff0, inset 0 1px rgba(255,255,255,.14), inset 0 -1px rgba(0,0,0,.55); }
       60%,100% { box-shadow:inset 0 1px rgba(255,255,255,.14), inset 0 -1px rgba(0,0,0,.55); }
     }
-    #${APP_ID} .djr-solved {
+    #${APP_ID} .djr-solved-count {
       position:absolute; left:var(--solved-left,1080px); top:5px; width:var(--solved-w,70px); text-align:center;
       font-size:var(--row-font,34px); font-style:italic; line-height:1;
     }
@@ -263,7 +269,7 @@
           <span class="djr-header-rank">Rank</span><span class="djr-header-name">Name</span>
           <span class="djr-header-solved">Solved</span><span class="djr-header-time">Time</span>
         </div>
-        <div data-role="rows"></div>
+        <div class="djr-rows" data-role="rows"></div>
         <div class="djr-info" data-role="info"></div>
       </div>
       <div class="djr-award" data-role="award">
@@ -1083,7 +1089,7 @@
         <div class="djr-logo-wrap"><img class="djr-logo" alt=""></div>
         <div class="djr-name"></div>
         <div class="djr-problems"></div>
-        <div class="djr-solved"></div><div class="djr-time"></div>`;
+        <div class="djr-solved-count"></div><div class="djr-time"></div>`;
       const orgId = teamOrgId(tid);
       const img = row.querySelector('.djr-logo');
       if (orgId) {
@@ -1173,6 +1179,10 @@
   }
 
   function currentDisplayRow(row, rowH, fallback) {
+    // On first scoreboard paint Java initializes each team directly at its ranked row.
+    // CSS defaults to translateY(0), so treating that default as a real prior position would
+    // incorrectly fan every team out from the first row for several seconds.
+    if (!row.dataset.displayRow && !row.dataset.targetDisplayRow) return fallback;
     try {
       const tr = getComputedStyle(row).transform;
       if (tr && tr !== 'none') {
@@ -1189,6 +1199,27 @@
       }
     } catch (_) {}
     const ds = Number(row.dataset.displayRow);
+    return Number.isFinite(ds) ? ds : fallback;
+  }
+
+  function currentScrollTop(rowH, fallback) {
+    if (!ui.rows.dataset.displayScrollTop && !ui.rows.dataset.targetScrollTop) return fallback;
+    try {
+      const tr = getComputedStyle(ui.rows).transform;
+      if (tr && tr !== 'none') {
+        const m3 = tr.match(/^matrix3d\((.+)\)$/);
+        if (m3) {
+          const a = m3[1].split(',').map(Number);
+          if (Number.isFinite(a[13])) return -a[13] / rowH;
+        }
+        const m2 = tr.match(/^matrix\((.+)\)$/);
+        if (m2) {
+          const a = m2[1].split(',').map(Number);
+          if (Number.isFinite(a[5])) return -a[5] / rowH;
+        }
+      }
+    } catch (_) {}
+    const ds = Number(ui.rows.dataset.displayScrollTop);
     return Number.isFinite(ds) ? ds : fallback;
   }
 
@@ -1280,43 +1311,71 @@
     const scrollTop = resolverFinished() && model.manualScrollTop != null
       ? Math.max(0, Math.min(maxManualScrollTop(), model.manualScrollTop))
       : resolverScrollTop;
+
+    // Keep scoreboard scrolling separate from team rank movement, like the Java Resolver.
+    // Mixing the viewport scroll into each team transform caused transient empty ranks when
+    // a medal-zone step was advanced while a promotion animation was still running.
+    const previousScrollTarget = Number(ui.rows.dataset.targetScrollTop);
+    const currentScroll = currentScrollTop(rowH, scrollTop);
+    const scrollAllAnimations = ui.rows.getAnimations();
+    const scrollActiveAnimations = scrollAllAnimations.filter((a) => a.playState === 'running' || a.playState === 'pending');
+    const sameScrollTarget = Number.isFinite(previousScrollTarget) && Math.abs(previousScrollTarget - scrollTop) < 1e-6;
+    ui.rows.style.transform = `translate3d(0,${-scrollTop * rowH}px,0)`;
+    if (!(animate && sameScrollTarget && scrollActiveAnimations.length)) {
+      // Finished fill-mode animations still override inline transform. Cancel every old animation,
+      // not only running ones, before installing the next target.
+      scrollAllAnimations.forEach((a) => a.cancel());
+      if (animate && Math.abs(scrollTop - currentScroll) > 1e-6) {
+        const duration = movementDurationRows(scrollTop - currentScroll, 6) * 1000 / model.scrollFactor;
+        const anim = ui.rows.animate(movementKeyframes(-currentScroll, -scrollTop, rowH, 6), {
+          duration, easing:'linear', fill:'both'
+        });
+        anim.addEventListener('finish', () => { try { anim.cancel(); } catch (_) {} }, { once:true });
+        model.motionUntil = Math.max(model.motionUntil, performance.now() + duration);
+      }
+    }
+    ui.rows.dataset.displayScrollTop = String(scrollTop);
+    ui.rows.dataset.targetScrollTop = String(scrollTop);
+
     const selectedSet = new Set(view.selectedTeamIds || []);
 
     state.order.forEach((tid, pos) => {
       const row = ui.rows.querySelector(`.djr-row[data-team-id="${cssEscape(tid)}"]`);
       if (!row) return;
-      const targetDisplayRow = pos - scrollTop;
+      const targetDisplayRow = pos;
       const previousTarget = Number(row.dataset.targetDisplayRow);
       const currentRow = currentDisplayRow(row, rowH, targetDisplayRow);
-      const activeAnimations = row.getAnimations().filter((a) => a.playState === 'running' || a.playState === 'pending');
+      const allAnimations = row.getAnimations();
+      const activeAnimations = allAnimations.filter((a) => a.playState === 'running' || a.playState === 'pending');
       const sameTarget = Number.isFinite(previousTarget) && Math.abs(previousTarget - targetDisplayRow) < 1e-6;
 
       row.style.setProperty('--y', `${targetDisplayRow * rowH}px`);
       row.style.transform = `translate3d(0,${targetDisplayRow * rowH}px,0)`;
 
       if (!(animate && sameTarget && activeAnimations.length)) {
-        activeAnimations.forEach((a) => a.cancel());
+        allAnimations.forEach((a) => a.cancel());
         if (animate && Math.abs(targetDisplayRow - currentRow) > 1e-6) {
-          const orderChanged = model.renderedView?.contestState?.order?.indexOf(tid) !== pos;
-          const maxSpeed = orderChanged ? 7 : 6;
-          const duration = movementDurationRows(targetDisplayRow - currentRow, maxSpeed) * 1000 / model.scrollFactor;
-          row.animate(movementKeyframes(currentRow, targetDisplayRow, rowH, maxSpeed), { duration, easing:'linear' });
+          const duration = movementDurationRows(targetDisplayRow - currentRow, 7) * 1000 / model.scrollFactor;
+          const anim = row.animate(movementKeyframes(currentRow, targetDisplayRow, rowH, 7), {
+            duration, easing:'linear', fill:'both'
+          });
+          anim.addEventListener('finish', () => { try { anim.cancel(); } catch (_) {} }, { once:true });
           model.motionUntil = Math.max(model.motionUntil, performance.now() + duration);
         }
       }
       row.dataset.displayRow = String(targetDisplayRow);
       row.dataset.targetDisplayRow = String(targetDisplayRow);
-      row.classList.toggle('even', pos % 2 === 0);
+      row.classList.toggle('djr-even', pos % 2 === 0);
       const selected = selectedSet.has(tid);
-      row.classList.toggle('selected', selected && view.selectType === 'normal');
-      row.classList.toggle('highlight', selected && view.selectType === 'highlight');
-      row.classList.toggle('fts', selected && view.selectType === 'fts');
-      row.classList.toggle('fts-highlight', selected && view.selectType === 'fts-highlight');
-      row.classList.toggle('team-list', selected && view.selectType === 'team-list');
+      row.classList.toggle('djr-selected', selected && view.selectType === 'normal');
+      row.classList.toggle('djr-highlight', selected && view.selectType === 'highlight');
+      row.classList.toggle('djr-fts', selected && view.selectType === 'fts');
+      row.classList.toggle('djr-fts-highlight', selected && view.selectType === 'fts-highlight');
+      row.classList.toggle('djr-team-list', selected && view.selectType === 'team-list');
       row.style.zIndex = selected ? '100' : String(20 + state.order.length - pos);
       row.querySelector('.djr-rank').textContent = state.standings.get(tid).rank || '';
       const st = state.standings.get(tid);
-      row.querySelector('.djr-solved').textContent = st.numSolved > 0 ? String(st.numSolved) : '';
+      row.querySelector('.djr-solved-count').textContent = st.numSolved > 0 ? String(st.numSolved) : '';
       row.querySelector('.djr-time').textContent = st.time > 0 ? String(st.time) : '';
 
       const cells = row.querySelectorAll('.djr-problem');
@@ -1324,12 +1383,12 @@
         const c = cells[pi];
         const r = state.results.get(tid).get(p.id);
         c.className = 'djr-problem';
-        if (r.status === 'SUBMITTED') c.classList.add('pending');
-        else if (r.status === 'SOLVED') c.classList.add(r.fts ? 'fts' : 'solved');
-        else if (r.status === 'FAILED') c.classList.add('failed');
+        if (r.status === 'SUBMITTED') c.classList.add('djr-cell-pending');
+        else if (r.status === 'SOLVED') c.classList.add(r.fts ? 'djr-fts' : 'djr-cell-solved');
+        else if (r.status === 'FAILED') c.classList.add('djr-cell-failed');
         c.style.fontSize = (r.status === 'UNATTEMPTED' ? `${problemFontPx}px` : `${statusFontPx}px`);
         const isFocus = view.selectedProblem && view.selectedProblem.teamId === tid && view.selectedProblem.problemIndex === pi;
-        c.classList.toggle('focus', Boolean(isFocus));
+        c.classList.toggle('djr-focus', Boolean(isFocus));
         const n = r.numPending + r.numJudged;
         if (r.status === 'UNATTEMPTED' || n === 0) c.textContent = p.label;
         else c.textContent = `${n}\u200A-\u200A${timeMin(r.time)}`;
@@ -1425,6 +1484,10 @@
     model.motionUntil = 0;
     model.renderedView = null;
     // Reset stored row locations so the first frame never animates from stale positions.
+    ui.rows.getAnimations().forEach((a)=>a.cancel());
+    delete ui.rows.dataset.displayScrollTop;
+    delete ui.rows.dataset.targetScrollTop;
+    ui.rows.style.transform = 'translate3d(0,0,0)';
     ui.rows.querySelectorAll('.djr-row').forEach((r) => {
       delete r.dataset.displayRow; delete r.dataset.targetDisplayRow; r.getAnimations().forEach((a)=>a.cancel());
     });
